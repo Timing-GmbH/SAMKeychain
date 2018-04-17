@@ -48,6 +48,10 @@ typedef NS_ENUM(NSUInteger, SAMKeychainQuerySynchronizationMode) {
 /** kSecAttrLabel */
 @property (nonatomic, copy, nullable) NSString *label;
 
+#if !TARGET_OS_IPHONE
+@property (nonatomic, copy, nullable) NSArray<NSString *> *sharedAppPaths;
+#endif
+
 #ifdef SAMKEYCHAIN_ACCESS_GROUP_AVAILABLE
 /** kSecAttrAccessGroup (only used on iOS) */
 @property (nonatomic, copy, nullable) NSString *accessGroup;

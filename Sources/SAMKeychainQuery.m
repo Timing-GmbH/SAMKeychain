@@ -14,6 +14,7 @@
 @synthesize account = _account;
 @synthesize service = _service;
 @synthesize label = _label;
+@synthesize sharedAppPaths = _sharedAppPaths;
 @synthesize passwordData = _passwordData;
 
 #ifdef SAMKEYCHAIN_ACCESS_GROUP_AVAILABLE
@@ -59,13 +60,49 @@
 			[query setObject:(__bridge id)accessibilityType forKey:(__bridge id)kSecAttrAccessible];
 		}
 #endif
-		status = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
+		
+		const char *label = [_label UTF8String];
+		const char *service = [_service UTF8String];
+		const char *account = [_account UTF8String];
+		
+		SecKeychainAttribute attrs[] = {
+			{ kSecLabelItemAttr, (UInt32)strlen(label), (char *)label },
+			{ kSecServiceItemAttr, (UInt32)strlen(service), (char *)service },
+			{ kSecAccountItemAttr, (UInt32)strlen(account), (char *)account }
+		};
+		SecKeychainAttributeList attributes = { sizeof(attrs) / sizeof(attrs[0]), attrs };
+		
+		SecAccessRef access = nil;
+		status = errSecSuccess;
+		if (_sharedAppPaths.count > 0) {
+			NSMutableArray *trustedApplications = [NSMutableArray array];
+			SecTrustedApplicationRef appRef;
+			status = SecTrustedApplicationCreateFromPath(NULL, &appRef);
+			if (status == errSecSuccess) {
+				[trustedApplications addObject:(id)CFBridgingRelease(appRef)];
+				for (NSString *path in _sharedAppPaths) {
+					status = SecTrustedApplicationCreateFromPath([path UTF8String], &appRef);
+					if (status != errSecSuccess) break;
+					[trustedApplications addObject:(id)CFBridgingRelease(appRef)];
+				}
+			}
+			if (status == errSecSuccess) {
+				status = SecAccessCreate((CFStringRef)_service,
+										 (CFArrayRef)trustedApplications, &access);
+			}
+		}
+		
+		if (status == errSecSuccess) {
+			status = SecKeychainItemCreateFromContent(kSecGenericPasswordItemClass, &attributes,
+													  (UInt32) _passwordData.length, _passwordData.bytes,
+													  nil, access, NULL);
+		}
 	}
 	if (status != errSecSuccess && error != NULL) {
 		*error = [[self class] errorWithCode:status];
 	}
-	return (status == errSecSuccess);}
-
+	return (status == errSecSuccess);
+}
 
 - (BOOL)deleteItem:(NSError *__autoreleasing *)error {
 	OSStatus status = SAMKeychainErrorBadArguments;
